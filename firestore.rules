@@ -1,0 +1,72 @@
+rules_version = '2';
+
+// Shelf Awareness — invite-only access.
+// Paste into Firebase console → Firestore Database → Rules, then Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Keep in sync with adminEmails in js/firebase-config.js
+    function adminEmails() { return ['wolfenfeld@gmail.com']; }
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function isAdmin() { return signedIn() && myEmail() in adminEmails(); }
+    function isMember() {
+      return isAdmin()
+        || (signedIn() && exists(/databases/$(database)/documents/members/$(myEmail())));
+    }
+    function invitePath(code) { return /databases/$(database)/documents/invites/$(code); }
+
+    // Guest list: one document per invited Google email (lower case).
+    match /members/{email} {
+      allow read: if isAdmin() || (signedIn() && email == myEmail());
+      allow update, delete: if isAdmin();
+      // Admin adds anyone; or a person redeems an unused invite for themselves
+      // (in the same batch that marks the invite as used).
+      allow create: if isAdmin() || (
+        signedIn() && email == myEmail()
+        && request.resource.data.keys().hasOnly(['role', 'invite', 'joinedAt', 'name'])
+        && request.resource.data.role == 'member'
+        && request.resource.data.invite is string
+        && exists(invitePath(request.resource.data.invite))
+        && get(invitePath(request.resource.data.invite)).data.usedBy == null
+        && getAfter(invitePath(request.resource.data.invite)).data.usedBy == myEmail()
+      );
+    }
+
+    // One-time invite links. Codes are long random strings.
+    match /invites/{code} {
+      allow list, create, delete: if isAdmin();
+      allow get: if signedIn();
+      allow update: if isAdmin() || (
+        signedIn()
+        && resource.data.usedBy == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.usedBy == myEmail()
+        && existsAfter(/databases/$(database)/documents/members/$(myEmail()))
+      );
+    }
+
+    // Series content: members read, admins write.
+    match /series/{seriesId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+      match /{rest=**} {
+        allow read: if isMember();
+        allow write: if isAdmin();
+      }
+    }
+
+    // Each person's own reading progress.
+    match /users/{uid} {
+      allow read, write: if isMember() && request.auth.uid == uid;
+      match /{rest=**} {
+        allow read, write: if isMember() && request.auth.uid == uid;
+      }
+    }
+  }
+}
