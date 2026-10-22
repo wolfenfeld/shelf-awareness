@@ -183,7 +183,16 @@ async function progressFor(id) {
 }
 
 // ---------- series model ----------
+// Book-type colours come from the bundle (types[key].color), so a series can define its own.
+function applyTypeColors(types) {
+  let el = document.getElementById("type-colors");
+  if (!el) { el = document.createElement("style"); el.id = "type-colors"; document.head.append(el); }
+  el.textContent = Object.entries(types || {})
+    .filter(([k, v]) => /^[\w-]+$/.test(k) && /^#[0-9a-f]{3,8}$/i.test(v?.color || ""))
+    .map(([k, v]) => `.t-${k}{--c:${v.color}}`).join("");
+}
 function prepSeries(s, prog) {
+  applyTypeColors(s.types);
   const order = [];
   (s.groups || []).forEach((g) => { g.books.forEach((b) => order.push(b)); (g.side || []).forEach((x) => order.push(x.book)); });
   Object.keys(s.books || {}).forEach((b) => { if (!order.includes(b)) order.push(b); });

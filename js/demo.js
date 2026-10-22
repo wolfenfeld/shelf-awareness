@@ -1,6 +1,6 @@
 // Local preview backend (open index.html?demo). Reads series bundles from ./content/
 // (which is git-ignored) and keeps progress in this browser only. No Firebase needed.
-export function createDemoBackend(seriesIds = ["discworld"]) {
+export function createDemoBackend(seriesIds = ["discworld", "foundation"]) {
   const user = { uid: "demo", email: "demo@example.com", name: "Demo reader", photo: "", verified: true };
   const key = (s) => `sa-demo-progress-${s}`;
   const cache = {};
